@@ -1,13 +1,12 @@
-
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <stdint.h>
-#include <sys/stat.h>
 
 typedef struct {
     int16_t someField[24];
@@ -34,7 +33,7 @@ typedef struct {
 } PartitionHeader;
 
 void getString(int16_t* baseString, char* resString) {
-    if(*baseString == 0) {
+    if (*baseString == 0) {
         *resString = 0;
         return;
     }
@@ -43,38 +42,37 @@ void getString(int16_t* baseString, char* resString) {
         *resString = 0xFF & *baseString;
         resString++;
         baseString++;
-        if(++length > 256)
-            break;
-    } while(baseString > 0);
+        if (++length > 256) break;
+    } while (baseString > 0);
     *resString = 0;
 }
 
 int main(int argc, char** argv) {
-    if(argc < 2) {
+    if (argc < 2) {
         printf("command format:\n   capextractor <firmware name>.pac");
         exit(EXIT_FAILURE);
     }
-    
+
     int fd = open(argv[1], O_RDONLY);
     if (fd == -1) {
         printf("file %s is not find", argv[1]);
         exit(EXIT_FAILURE);
     }
-    
-//    fseek(fd, 0, SEEK_END);
-//    int firmwareSize = (fd);
-//    fseek(fd, 0, SEEK_SET);
+
+    // fseek(fd, 0, SEEK_END);
+    // int firmwareSize = (fd);
+    // fseek(fd, 0, SEEK_SET);
     struct stat st;
     stat(argv[1], &st);
     int firmwareSize = st.st_size;
-    if(firmwareSize < sizeof(PacHeader)) {
+    if (firmwareSize < sizeof(PacHeader)) {
         printf("file %s is not firmware", argv[1]);
         exit(EXIT_FAILURE);
     }
-    
+
     PacHeader pacHeader;
-    size_t rb =read(fd, &pacHeader, sizeof(PacHeader));
-    if(rb <= 0) {
+    size_t rb = read(fd, &pacHeader, sizeof(PacHeader));
+    if (rb <= 0) {
         printf("Error while parsing PAC header");
         exit(EXIT_FAILURE);
     }
@@ -84,31 +82,32 @@ int main(int argc, char** argv) {
     getString(pacHeader.firmwareName, buffer);
     printf("Firmware name: %s\n", buffer);
     uint32_t curPos = pacHeader.partitionsListStart;
-    PartitionHeader** partHeaders = malloc(sizeof(PartitionHeader**)*pacHeader.partitionCount);
+    PartitionHeader** partHeaders = malloc(sizeof(PartitionHeader**) * pacHeader.partitionCount);
     int i;
-    for(i = 0; i < pacHeader.partitionCount; i++) {
+    for (i = 0; i < pacHeader.partitionCount; i++) {
         lseek(fd, curPos, SEEK_SET);
         uint32_t length;
-        rb =read(fd, &length, sizeof(uint32_t));
-        if(rb <= 0) {
+        rb = read(fd, &length, sizeof(uint32_t));
+        if (rb <= 0) {
             printf("Partition header error");
             exit(EXIT_FAILURE);
         }
         partHeaders[i] = malloc(length);
         lseek(fd, curPos, SEEK_SET);
         curPos += length;
-        rb =read(fd, partHeaders[i], length);
-        if(rb <= 0) {
+        rb = read(fd, partHeaders[i], length);
+        if (rb <= 0) {
             printf("Partition header error");
             exit(EXIT_FAILURE);
         }
         getString(partHeaders[i]->partitionName, buffer);
         getString(partHeaders[i]->fileName, buffer1);
-        printf("Partition name: %s\n\twith file name: %s\n\twith size %u\n", buffer, buffer1, partHeaders[i]->partitionSize);
+        printf("Partition name: %s\n\twith file name: %s\n\twith size %u\n", buffer, buffer1,
+               partHeaders[i]->partitionSize);
     }
-    
-    for(i = 0; i < pacHeader.partitionCount; i++) {
-        if(partHeaders[i]->partitionSize == 0) {
+
+    for (i = 0; i < pacHeader.partitionCount; i++) {
+        if (partHeaders[i]->partitionSize == 0) {
             free(partHeaders[i]);
             continue;
         }
@@ -118,20 +117,21 @@ int main(int argc, char** argv) {
         int fd_new = open(buffer, O_WRONLY | O_CREAT, 0666);
         printf("Extract %s\n", buffer);
         uint32_t dataSizeLeft = partHeaders[i]->partitionSize;
-        while(dataSizeLeft > 0) {
+        while (dataSizeLeft > 0) {
             uint32_t copyLength = (dataSizeLeft > 256) ? 256 : dataSizeLeft;
             dataSizeLeft -= copyLength;
-            rb =read(fd, buffer, copyLength);
-            if(rb != copyLength) {
+            rb = read(fd, buffer, copyLength);
+            if (rb != copyLength) {
                 printf("Partition image extraction error");
                 exit(EXIT_FAILURE);
             }
             rb = write(fd_new, buffer, copyLength);
-            if(rb != copyLength) {
+            if (rb != copyLength) {
                 printf("Partition image extraction error");
                 exit(EXIT_FAILURE);
             }
-            printf("\r\t%02d%%", (uint64_t)100 - (uint64_t)100*dataSizeLeft/partHeaders[i]->partitionSize);
+            printf("\r\t%02d%%",
+                   (uint64_t)100 - (uint64_t)100 * dataSizeLeft / partHeaders[i]->partitionSize);
         }
         printf("\n");
         close(fd_new);
@@ -139,6 +139,6 @@ int main(int argc, char** argv) {
     }
     free(partHeaders);
     close(fd);
-    
+
     return EXIT_SUCCESS;
 }
